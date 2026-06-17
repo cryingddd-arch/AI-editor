@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 文档编辑器</title>
+    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --bg: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #475569;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .toolbar-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+
+        .toolbar-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 73px);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .sidebar-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .file-item {
+            background: var(--bg-tertiary);
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .file-item:hover, .file-item.active {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .file-icon {
+            font-size: 1.5rem;
+        }
+
+        .file-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .file-name {
+            font-size: 0.875rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-size {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .file-delete {
+            opacity: 0;
+            background: none;
+            border: none;
+            color: var(--error);
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .file-item:hover .file-delete {
+            opacity: 1;
+        }
+
+        /* Editor Area */
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Drop Zone */
+        .drop-zone {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed var(--border);
+            margin: 2rem;
+            border-radius: 16px;
+            transition: all 0.3s;
+            background: var(--bg-secondary);
+        }
+
+        .drop-zone.drag-over {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .drop-zone.hidden {
+            display: none;
+        }
+
+        .drop-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .drop-text {
+            font-size: 1.25rem;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .drop-hint {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .drop-btn {
+            margin-top: 1.5rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .drop-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Editor */
+        .editor-container {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .editor-container.active {
+            display: block;
+        }
+
+        .editor {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 3rem;
+            min-height: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .editor:focus {
+            outline: none;
+        }
+
+        .editor h1, .editor h2, .editor h3 {
+            color: var(--text);
+            margin: 1.5rem 0 1rem 0;
+        }
+
+        .editor p {
+            margin: 1rem 0;
+        }
+
+        .editor img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 1rem 0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .editor img:hover {
+            box-shadow: 0 0 0 3px var(--primary);
+        }
+
+        .editor img.selected {
+            box-shadow: 0 0 0 3px var(--primary);
+        }
+
+        /* Settings Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            width: 500px;
+            max-width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: modalIn 0.3s ease-out;
+        }
+
+        @keyframes modalIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: var(--text);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: var(--text);
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            padding: 0.625rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            border: 1px solid var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        /* AI Popup */
+        .ai-popup {
+            position: fixed;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            width: 400px;
+            max-height: 600px;
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+        }
+
+        .ai-popup.visible {
+            display: flex;
+            flex-direction: column;
+            animation: popupIn 0.2s ease-out;
+        }
+
+        @keyframes popupIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+            }
+        }
+
+        .ai-popup-header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .ai-popup-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ai-popup-close {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1.25rem;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .ai-popup-close:hover {
+            opacity: 1;
+        }
+
+        .ai-popup-content {
+            padding: 1rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .ai-selected-text {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            max-height: 100px;
+            overflow-y: auto;
+            border-left: 3px solid var(--primary);
+        }
+
+        .ai-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .ai-action-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.625rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .ai-action-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .ai-action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .ai-custom-input {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .ai-custom-input input {
+            flex: 1;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.625rem 0.875rem;
+            color: var(--text);
+            font-size: 0.875rem;
+        }
+
+        .ai-custom-input input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .ai-custom-input button {
+            background: var(--primary);
+            border: none;
+            color: white;
+            padding: 0.625rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .ai-custom-input button:hover {
+            background: var(--primary-dark);
+        }
+
+        .ai-result {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            border: 1px solid var(--border);
+            display: none;
+        }
+
+        .ai-result.visible {
+            display: block;
+        }
+
+        .ai-result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .ai-result-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 0.05em;
+        }
+
+        .ai-result-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .ai-result-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .ai-result-btn:hover {
+            background: var(--border);
+            color: var(--text);
+        }
+
+        .ai-result-content {
+            font-size: 0.875rem;
+            line-height: 1.7;
+            color: var(--text);
+            white-space: pre-wrap;
+        }
+
+        .ai-loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .ai-loading.visible {
+            display: flex;
+        }
+
+        .ai-loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Image AI Popup */
+        .image-popup {
+            position: fixed;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            width: 450px;
+            max-height: 80vh;
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+        }
+
+        .image-popup.visible {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .image-preview {
+            max-height: 200px;
+            overflow: hidden;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-preview img {
+            max-width: 100%;
+            max-height: 200px;
+            object-fit: contain;
+        }
+
+        .image-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Status indicator */
+        .api-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            font-size: 0.75rem;
+        }
+
+        .api-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--error);
+        }
+
+        .api-status-dot.connected {
+            background: var(--success);
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            z-index: 3000;
+            display: none;
+            animation: toastIn 0.3s ease-out;
+        }
+
+        .toast.visible {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error { border-left: 3px solid var(--error); }
+        .toast.warning { border-left: 3px solid var(--warning); }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">📝</div>
+            <span>AI 文档编辑器</span>
+        </div>
+        <div class="toolbar">
+            <div class="api-status">
+                <span class="api-status-dot" id="apiStatusDot"></span>
+                <span id="apiStatusText">未配置</span>
+            </div>
+            <button class="toolbar-btn" onclick="openSettings()">
+                ⚙️ API设置
+            </button>
+            <button class="toolbar-btn" onclick="exportDoc()">
+                📤 导出
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-title">📁 文档列表</div>
+            <div class="file-list" id="fileList">
+                <div class="drop-hint" style="text-align: center; padding: 2rem;">
+                    拖入Word文档开始编辑
+                </div>
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <!-- Drop Zone -->
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-icon">📄</div>
+                <div class="drop-text">拖放 Word 文档到这里</div>
+                <div class="drop-hint">支持 .docx 格式文件</div>
+                <button class="drop-btn" onclick="document.getElementById('fileInput').click()">
+                    选择文件
+                </button>
+                <input type="file" id="fileInput" accept=".docx" style="display: none;">
+            </div>
+
+            <!-- Editor Container -->
+            <div class="editor-container" id="editorContainer">
+                <div class="editor" id="editor" contenteditable="true"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">⚙️ API 配置</span>
+                <button class="modal-close" onclick="closeSettings()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">API Base URL</label>
+                    <input type="text" class="form-input" id="apiBaseUrl" 
+                           placeholder="https://api.openai.com/v1">
+                    <div class="form-hint">例如: https://api.openai.com/v1 或其他兼容端点</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-input" id="apiKey" 
+                           placeholder="sk-...">
+                    <div class="form-hint">您的API密钥，将安全存储在本地</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Model</label>
+                    <input type="text" class="form-input" id="apiModel" 
+                           placeholder="gpt-4o / gpt-3.5-turbo / claude-3-sonnet...">
+                    <div class="form-hint">使用的模型名称</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Vision Model (图像识别用)</label>
+                    <input type="text" class="form-input" id="visionModel" 
+                           placeholder="gpt-4o / gpt-4-vision-preview...">
+                    <div class="form-hint">支持图像输入的模型，留空则使用上面的模型</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSettings()">取消</button>
+                <button class="btn btn-secondary" onclick="testConnection()">测试连接</button>
+                <button class="btn btn-primary" onclick="saveSettings()">保存配置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Text Popup -->
+    <div class="ai-popup" id="aiPopup">
+        <div class="ai-popup-header">
+            <span class="ai-popup-title">✨ AI 助手</span>
+            <button class="ai-popup-close" onclick="closeAiPopup()">×</button>
+        </div>
+        <div class="ai-popup-content">
+            <div class="ai-selected-text" id="selectedTextPreview">选中的文本将显示在这里...</div>
+            
+            <div class="ai-actions">
+                <button class="ai-action-btn" onclick="aiAction('polish')">
+                    ✨ 润色
+                </button>
+                <button class="ai-action-btn" onclick="aiAction('expand')">
+                    📝 扩写
+                </button>
+                <button class="ai-action-btn" onclick="aiAction('summarize')">
+                    📋 总结
+                </button>
+                <button class="ai-action-btn" onclick="aiAction('simplify')">
+                    🎯 精简
+                </button>
+                <button class="ai-action-btn" onclick="aiAction('formal')">
+                    👔 正式化
+                </button>
+                <button class="ai-action-btn" onclick="aiAction('casual')">
+                    😊 口语化
+                </button>
+                <button class="ai-action-btn" onclick="aiAction('translate_en')">
+                    🌐 译英文
+                </button>
+                <button class="ai-action-btn" onclick="aiAction('translate_zh')">
+                    🌐 译中文
+                </button>
+            </div>
+            
+            <div class="ai-custom-input">
+                <input type="text" id="customPrompt" placeholder="输入自定义指令...">
+                <button onclick="aiAction('custom')">发送</button>
+            </div>
+            
+            <div class="ai-loading" id="aiLoading">
+                <div class="ai-loading-spinner"></div>
+                <span>AI 正在思考...</span>
+            </div>
+            
+            <div class="ai-result" id="aiResult">
+                <div class="ai-result-header">
+                    <span class="ai-result-title">AI 输出</span>
+                    <div class="ai-result-actions">
+                        <button class="ai-result-btn" onclick="copyResult()">📋 复制</button>
+                        <button class="ai-result-btn" onclick="replaceText()">✅ 替换</button>
+                        <button class="ai-result-btn" onclick="insertAfter()">➕ 插入</button>
+                    </div>
+                </div>
+                <div class="ai-result-content" id="aiResultContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image AI Popup -->
+    <div class="image-popup" id="imagePopup">
+        <div class="ai-popup-header">
+            <span class="ai-popup-title">🖼️ 图像AI分析</span>
+            <button class="ai-popup-close" onclick="closeImagePopup()">×</button>
+        </div>
+        <div class="image-preview">
+            <img id="selectedImagePreview" src="" alt="Selected Image">
+        </div>
+        <div class="ai-popup-content">
+            <div class="image-actions">
+                <button class="ai-action-btn" onclick="imageAction('describe')">
+                    📝 描述图片
+                </button>
+                <button class="ai-action-btn" onclick="imageAction('extract_text')">
+                    📄 提取文字(OCR)
+                </button>
+                <button class="ai-action-btn" onclick="imageAction('analyze')">
+                    🔍 详细分析
+                </button>
+                <button class="ai-action-btn" onclick="imageAction('caption')">
+                    💬 生成标题
+                </button>
+            </div>
+            
+            <div class="ai-custom-input">
+                <input type="text" id="imageCustomPrompt" placeholder="询问关于这张图片的问题...">
+                <button onclick="imageAction('custom')">发送</button>
+            </div>
+            
+            <div class="ai-loading" id="imageAiLoading">
+                <div class="ai-loading-spinner"></div>
+                <span>AI 正在分析图片...</span>
+            </div>
+            
+            <div class="ai-result" id="imageAiResult">
+                <div class="ai-result-header">
+                    <span class="ai-result-title">分析结果</span>
+                    <div class="ai-result-actions">
+                        <button class="ai-result-btn" onclick="copyImageResult()">📋 复制</button>
+                        <button class="ai-result-btn" onclick="insertImageCaption()">➕ 插入为说明</button>
+                    </div>
+                </div>
+                <div class="ai-result-content" id="imageAiResultContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <span id="toastIcon">✓</span>
+        <span id="toastMessage">操作成功</span>
+    </div>
+
+    <script>
+        // ==================== 配置管理 ====================
+        const CONFIG_KEY = 'ai_editor_config';
+        
+        let config = {
+            baseUrl: '',
+            apiKey: '',
+            model: '',
+            visionModel: ''
+        };
+
+        // 加载配置
+        function loadConfig() {
+            const saved = localStorage.getItem(CONFIG_KEY);
+            if (saved) {
+                config = JSON.parse(saved);
+                document.getElementById('apiBaseUrl').value = config.baseUrl || '';
+                document.getElementById('apiKey').value = config.apiKey || '';
+                document.getElementById('apiModel').value = config.model || '';
+                document.getElementById('visionModel').value = config.visionModel || '';
+                updateApiStatus();
+            }
+        }
+
+        // 保存配置
+        function saveSettings() {
+            config.baseUrl = document.getElementById('apiBaseUrl').value.trim().replace(/\/$/, '');
+            config.apiKey = document.getElementById('apiKey').value.trim();
+            config.model = document.getElementById('apiModel').value.trim();
+            config.visionModel = document.getElementById('visionModel').value.trim();
+            
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+            updateApiStatus();
+            closeSettings();
+            showToast('配置已保存', 'success');
+        }
+
+        // 更新API状态显示
+        function updateApiStatus() {
+            const dot = document.getElementById('apiStatusDot');
+            const text = document.getElementById('apiStatusText');
+            
+            if (config.baseUrl && config.apiKey && config.model) {
+                dot.classList.add('connected');
+                text.textContent = config.model;
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = '未配置';
+            }
+        }
+
+        // 测试连接
+        async function testConnection() {
+            const baseUrl = document.getElementById('apiBaseUrl').value.trim().replace(/\/$/, '');
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const model = document.getElementById('apiModel').value.trim();
+            
+            if (!baseUrl || !apiKey || !model) {
+                showToast('请填写完整的配置信息', 'error');
+                return;
+            }
+            
+            try {
+                showToast('正在测试连接...', 'warning');
+                
+                const response = await fetch(`${baseUrl}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: 'user', content: 'Hi' }],
+                        max_tokens: 10
+                    })
+                });
+                
+                if (response.ok) {
+                    showToast('连接成功！', 'success');
+                } else {
+                    const error = await response.json();
+                    showToast(`连接失败: ${error.error?.message || response.statusText}`, 'error');
+                }
+            } catch (error) {
+                showToast(`连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        function openSettings() {
+            document.getElementById('settingsModal').classList.add('visible');
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.remove('visible');
+        }
+
+        // ==================== AI API 调用 ====================
+        async function callLLM(messages, useVision = false) {
+            if (!config.baseUrl || !config.apiKey || !config.model) {
+                throw new Error('请先配置API设置');
+            }
+            
+            const model = useVision && config.visionModel ? config.visionModel : config.model;
+            
+            const response = await fetch(`${config.baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${config.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: messages,
+                    max_tokens: 2000,
+                    temperature: 0.7
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error?.message || 'API请求失败');
+            }
+            
+            const data = await response.json();
+            return data.choices[0].message.content;
+        }
+
+        // ==================== 文本AI功能 ====================
+        let selectedText = '';
+        let selectionRange = null;
+
+        const PROMPTS = {
+            polish: '请润色以下文本，使其更加流畅优美，保持原意：\n\n',
+            expand: '请扩写以下文本，添加更多细节和描述，使内容更加丰富：\n\n',
+            summarize: '请总结以下文本的核心要点，简洁明了：\n\n',
+            simplify: '请精简以下文本，去除冗余，保留核心信息：\n\n',
+            formal: '请将以下文本改写为正式的书面语言风格：\n\n',
+            casual: '请将以下文本改写为轻松的口语化风格：\n\n',
+            translate_en: '请将以下文本翻译成英文：\n\n',
+            translate_zh: '请将以下中文翻译成中文（如已是中文则润色）：\n\n'
+        };
+
+        async function aiAction(action) {
+            if (!selectedText) {
+                showToast('请先选择文本', 'error');
+                return;
+            }
+            
+            let prompt;
+            if (action === 'custom') {
+                const customInput = document.getElementById('customPrompt').value.trim();
+                if (!customInput) {
+                    showToast('请输入自定义指令', 'error');
+                    return;
+                }
+                prompt = customInput + '\n\n' + selectedText;
+            } else {
+                prompt = PROMPTS[action] + selectedText;
+            }
+            
+            const loading = document.getElementById('aiLoading');
+            const result = document.getElementById('aiResult');
+            const resultContent = document.getElementById('aiResultContent');
+            
+            loading.classList.add('visible');
+            result.classList.remove('visible');
+            
+            try {
+                const response = await callLLM([
+                    { role: 'system', content: '你是一个专业的文字编辑助手，请直接输出处理后的结果，不要添加额外的解释。' },
+                    { role: 'user', content: prompt }
+                ]);
+                
+                resultContent.textContent = response;
+                result.classList.add('visible');
+            } catch (error) {
+                showToast(error.message, 'error');
+            } finally {
+                loading.classList.remove('visible');
+            }
+        }
+
+        function copyResult() {
+            const content = document.getElementById('aiResultContent').textContent;
+            navigator.clipboard.writeText(content);
+            showToast('已复制到剪贴板', 'success');
+        }
+
+        function replaceText() {
+            if (selectionRange) {
+                const content = document.getElementById('aiResultContent').textContent;
+                selectionRange.deleteContents();
+                selectionRange.insertNode(document.createTextNode(content));
+                closeAiPopup();
+                showToast('已替换文本', 'success');
+            }
+        }
+
+        function insertAfter() {
+            if (selectionRange) {
+                const content = document.getElementById('aiResultContent').textContent;
+                selectionRange.collapse(false);
+                selectionRange.insertNode(document.createTextNode('\n' + content));
+                closeAiPopup();
+                showToast('已插入文本', 'success');
+            }
+        }
+
+        function showAiPopup(x, y) {
+            const popup = document.getElementById('aiPopup');
+            
+            // 调整位置确保在视口内
+            const rect = popup.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            let left = x;
+            let top = y + 10;
+            
+            if (left + 400 > viewportWidth) {
+                left = viewportWidth - 420;
+            }
+            if (top + 500 > viewportHeight) {
+                top = y - 510;
+            }
+            
+            popup.style.left = Math.max(10, left) + 'px';
+            popup.style.top = Math.max(10, top) + 'px';
+            popup.classList.add('visible');
+            
+            document.getElementById('selectedTextPreview').textContent = 
+                selectedText.length > 200 ? selectedText.substring(0, 200) + '...' : selectedText;
+            
+            // 重置结果区域
+            document.getElementById('aiResult').classList.remove('visible');
+            document.getElementById('aiLoading').classList.remove('visible');
+            document.getElementById('customPrompt').value = '';
+        }
+
+        function closeAiPopup() {
+            document.getElementById('aiPopup').classList.remove('visible');
+        }
+
+        // ==================== 图像AI功能 ====================
+        let selectedImage = null;
+        let selectedImageBase64 = '';
+
+        const IMAGE_PROMPTS = {
+            describe: '请详细描述这张图片的内容。',
+            extract_text: '请提取并输出这张图片中所有可见的文字内容（OCR）。如果没有文字，请说明。',
+            analyze: '请对这张图片进行详细分析，包括：1）图片内容描述 2）主要元素 3）可能的用途或含义',
+            caption: '请为这张图片生成一个简洁的标题或说明文字。'
+        };
+
+        async function imageAction(action) {
+            if (!selectedImageBase64) {
+                showToast('图片加载失败', 'error');
+                return;
+            }
+            
+            let prompt;
+            if (action === 'custom') {
+                prompt = document.getElementById('imageCustomPrompt').value.trim();
+                if (!prompt) {
+                    showToast('请输入问题', 'error');
+                    return;
+                }
+            } else {
+                prompt = IMAGE_PROMPTS[action];
+            }
+            
+            const loading = document.getElementById('imageAiLoading');
+            const result = document.getElementById('imageAiResult');
+            const resultContent = document.getElementById('imageAiResultContent');
+            
+            loading.classList.add('visible');
+            result.classList.remove('visible');
+            
+            try {
+                const response = await callLLM([
+                    {
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: prompt },
+                            { 
+                                type: 'image_url', 
+                                image_url: { 
+                                    url: selectedImageBase64 
+                                } 
+                            }
+                        ]
+                    }
+                ], true);
+                
+                resultContent.textContent = response;
+                result.classList.add('visible');
+            } catch (error) {
+                showToast(error.message, 'error');
+            } finally {
+                loading.classList.remove('visible');
+            }
+        }
+
+        function copyImageResult() {
+            const content = document.getElementById('imageAiResultContent').textContent;
+            navigator.clipboard.writeText(content);
+            showToast('已复制到剪贴板', 'success');
+        }
+
+        function insertImageCaption() {
+            if (selectedImage) {
+                const content = document.getElementById('imageAiResultContent').textContent;
+                const caption = document.createElement('p');
+                caption.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary); font-style: italic; text-align: center;';
+                caption.textContent = content;
+                selectedImage.insertAdjacentElement('afterend', caption);
+                closeImagePopup();
+                showToast('已插入图片说明', 'success');
+            }
+        }
+
+        function showImagePopup(img, x, y) {
+            selectedImage = img;
+            
+            // 获取图片base64
+            if (img.src.startsWith('data:')) {
+                selectedImageBase64 = img.src;
+            } else {
+                // 转换为base64
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                selectedImageBase64 = canvas.toDataURL('image/png');
+            }
+            
+            document.getElementById('selectedImagePreview').src = selectedImageBase64;
+            
+            const popup = document.getElementById('imagePopup');
+            
+            let left = x;
+            let top = y + 10;
+            
+            if (left + 450 > window.innerWidth) {
+                left = window.innerWidth - 470;
+            }
+            if (top + 500 > window.innerHeight) {
+                top = y - 510;
+            }
+            
+            popup.style.left = Math.max(10, left) + 'px';
+            popup.style.top = Math.max(10, top) + 'px';
+            popup.classList.add('visible');
+            
+            document.getElementById('imageAiResult').classList.remove('visible');
+            document.getElementById('imageAiLoading').classList.remove('visible');
+            document.getElementById('imageCustomPrompt').value = '';
+        }
+
+        function closeImagePopup() {
+            document.getElementById('imagePopup').classList.remove('visible');
+            selectedImage = null;
+        }
+
+        // ==================== 文档处理 ====================
+        const files = [];
+        let currentFileIndex = -1;
+
+        // 拖放处理
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults);
+            document.body.addEventListener(eventName, preventDefaults);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'));
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'));
+        });
+
+        dropZone.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const droppedFiles = dt.files;
+            handleFiles(droppedFiles);
+        }
+
+        function handleFileSelect(e) {
+            handleFiles(e.target.files);
+        }
+
+        async function handleFiles(fileList) {
+            for (const file of fileList) {
+                if (file.name.endsWith('.docx')) {
+                    await processDocx(file);
+                } else {
+                    showToast('只支持 .docx 格式文件', 'error');
+                }
+            }
+        }
+
+        async function processDocx(file) {
+            try {
+                showToast('正在解析文档...', 'warning');
+                
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.convertToHtml({ arrayBuffer }, {
+                    convertImage: mammoth.images.imgElement(function(image) {
+                        return image.read("base64").then(function(imageBuffer) {
+                            return {
+                                src: "data:" + image.contentType + ";base64," + imageBuffer
+                            };
+                        });
+                    })
+                });
+                
+                const fileData = {
+                    name: file.name,
+                    size: formatFileSize(file.size),
+                    content: result.value,
+                    messages: result.messages
+                };
+                
+                files.push(fileData);
+                updateFileList();
+                selectFile(files.length - 1);
+                
+                showToast('文档解析成功', 'success');
+            } catch (error) {
+                console.error(error);
+                showToast('文档解析失败: ' + error.message, 'error');
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            
+            if (files.length === 0) {
+                fileList.innerHTML = '<div class="drop-hint" style="text-align: center; padding: 2rem;">拖入Word文档开始编辑</div>';
+                return;
+            }
+            
+            fileList.innerHTML = files.map((file, index) => `
+                <div class="file-item ${index === currentFileIndex ? 'active' : ''}" onclick="selectFile(${index})">
+                    <span class="file-icon">📄</span>
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${file.size}</div>
+                    </div>
+                    <button class="file-delete" onclick="event.stopPropagation(); deleteFile(${index})">🗑️</button>
+                </div>
+            `).join('');
+        }
+
+        function selectFile(index) {
+            currentFileIndex = index;
+            const file = files[index];
+            
+            document.getElementById('editor').innerHTML = file.content;
+            document.getElementById('dropZone').classList.add('hidden');
+            document.getElementById('editorContainer').classList.add('active');
+            
+            updateFileList();
+            setupEditorEvents();
+        }
+
+        function deleteFile(index) {
+            files.splice(index, 1);
+            
+            if (files.length === 0) {
+                currentFileIndex = -1;
+                document.getElementById('editor').innerHTML = '';
+                document.getElementById('dropZone').classList.remove('hidden');
+                document.getElementById('editorContainer').classList.remove('active');
+            } else if (index <= currentFileIndex) {
+                currentFileIndex = Math.max(0, currentFileIndex - 1);
+                selectFile(currentFileIndex);
+            }
+            
+            updateFileList();
+        }
+
+        function setupEditorEvents() {
+            const editor = document.getElementById('editor');
+            
+            // 文本选择事件
+            editor.addEventListener('mouseup', handleTextSelection);
+            
+            // 图片点击事件
+            editor.querySelectorAll('img').forEach(img => {
+                img.addEventListener('click', handleImageClick);
+            });
+        }
+
+        function handleTextSelection(e) {
+            const selection = window.getSelection();
+            const text = selection.toString().trim();
+            
+            if (text.length > 0) {
+                selectedText = text;
+                selectionRange = selection.getRangeAt(0).cloneRange();
+                
+                const rect = selection.getRangeAt(0).getBoundingClientRect();
+                showAiPopup(rect.left, rect.bottom);
+            }
+        }
+
+        function handleImageClick(e) {
+            e.stopPropagation();
+            
+            // 移除其他图片的选中状态
+            document.querySelectorAll('.editor img.selected').forEach(img => {
+                img.classList.remove('selected');
+            });
+            
+            e.target.classList.add('selected');
+            showImagePopup(e.target, e.clientX, e.clientY);
+        }
+
+        // 点击其他地方关闭弹窗
+        document.addEventListener('click', (e) => {
+            const aiPopup = document.getElementById('aiPopup');
+            const imagePopup = document.getElementById('imagePopup');
+            
+            if (!aiPopup.contains(e.target) && !e.target.closest('.editor')) {
+                closeAiPopup();
+            }
+            
+            if (!imagePopup.contains(e.target) && !e.target.classList.contains('selected')) {
+                closeImagePopup();
+                document.querySelectorAll('.editor img.selected').forEach(img => {
+                    img.classList.remove('selected');
+                });
+            }
+        });
+
+        // 导出功能
+        function exportDoc() {
+            const editor = document.getElementById('editor');
+            const content = editor.innerHTML;
+            
+            const blob = new Blob([`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>导出文档</title></head>
+                <body>${content}</body>
+                </html>
+            `], { type: 'text/html' });
+            
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'document.html';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            showToast('文档已导出', 'success');
+        }
+
+        // Toast提示
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toastIcon');
+            const msg = document.getElementById('toastMessage');
+            
+            const icons = {
+                success: '✓',
+                error: '✕',
+                warning: '⚠'
+            };
+            
+            toast.className = `toast visible ${type}`;
+            icon.textContent = icons[type] || '✓';
+            msg.textContent = message;
+            
+            setTimeout(() => {
+                toast.classList.remove('visible');
+            }, 3000);
+        }
+
+        // 初始化
+        loadConfig();
+    </script>
+</body>
+</html>
